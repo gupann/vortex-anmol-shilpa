@@ -115,6 +115,13 @@ static op_string_t op_string(const Instr &instr) {
       default:
         std::abort();
       }
+      case AluType::DOT8: {
+        if (aluArgs.is_imm) {
+          return {"DOT8I", to_hex_str(aluArgs.imm)};
+        } else {
+          return {"DOT8", ""};
+        }
+      }
     },
     [&](VoteType vote_type)-> op_string_t {
       switch (vote_type) {
