@@ -6,6 +6,7 @@
 #include <vortex.h>
 #include <cmath>
 #include "common.h"
+#include <cstdint>
 
 #define FLOAT_ULP 6
 
@@ -23,6 +24,9 @@
 
 template <typename Type>
 class Comparator {};
+
+using Tin  = int8_t; // inputs A, B
+using Tout = int32_t; // output C
 
 template <>
 class Comparator<int> {
@@ -69,7 +73,7 @@ public:
   }
 };
 
-static void matmul_cpu(int32_t* out, const int8_t* A, const int8_t* B, uint32_t width, uint32_t height) {
+static void matmul_cpu(Tout* out, const Tin* A, const Tin* B, uint32_t width, uint32_t height) {
   for (uint32_t row = 0; row < height; ++row) {
     for (uint32_t col = 0; col < width; ++col) {
       int32_t sum(0);
@@ -82,7 +86,7 @@ static void matmul_cpu(int32_t* out, const int8_t* A, const int8_t* B, uint32_t 
 }
 
 const char* kernel_file = "kernel.vxbin";
-uint32_t size = 8; // should this be 8?
+uint32_t size = 32;
 
 vx_device_h device = nullptr;
 vx_buffer_h A_buffer = nullptr;
@@ -140,9 +144,12 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_dev_open(&device));
 
   uint32_t size_sq = size * size;
-  uint32_t buf_size = size_sq * sizeof(TYPE);
+  uint32_t buf_size_A = size_sq * sizeof(Tin);
+  uint32_t buf_size_B = size_sq * sizeof(Tin);
+  uint32_t buf_size_C = size_sq * sizeof(Tout);
 
-  std::cout << "data type: " << Comparator<TYPE>::type_str() << std::endl;
+  std::cout << "input data type (A/B): " << Comparator<Tin>::type_str() << std::endl;
+  std::cout << "output data type (C): " << Comparator<Tout>::type_str() << std::endl;
   std::cout << "matrix size: " << size << "x" << size << std::endl;
 
   kernel_arg.grid_dim[0] = size;
@@ -151,11 +158,11 @@ int main(int argc, char *argv[]) {
 
   // allocate device memory
   std::cout << "allocate device memory" << std::endl;
-  RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_READ, &A_buffer));
+  RT_CHECK(vx_mem_alloc(device, buf_size_A, VX_MEM_READ, &A_buffer));
   RT_CHECK(vx_mem_address(A_buffer, &kernel_arg.A_addr));
-  RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_READ, &B_buffer));
+  RT_CHECK(vx_mem_alloc(device, buf_size_B, VX_MEM_READ, &B_buffer));
   RT_CHECK(vx_mem_address(B_buffer, &kernel_arg.B_addr));
-  RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_WRITE, &C_buffer));
+  RT_CHECK(vx_mem_alloc(device, buf_size_C, VX_MEM_WRITE, &C_buffer));
   RT_CHECK(vx_mem_address(C_buffer, &kernel_arg.C_addr));
 
   std::cout << "A_addr=0x" << std::hex << kernel_arg.A_addr << std::endl;
@@ -163,24 +170,24 @@ int main(int argc, char *argv[]) {
   std::cout << "C_addr=0x" << std::hex << kernel_arg.C_addr << std::endl;
 
   // generate source data
-  std::vector<TYPE> h_A(size_sq);
-  std::vector<TYPE> h_B(size_sq);
-  std::vector<TYPE> h_C(size_sq);
+  std::vector<Tin> h_A(size_sq);
+  std::vector<Tin> h_B(size_sq);
+  std::vector<Tout> h_C(size_sq);
   for (uint32_t i = 0; i < size_sq; ++i) {
-    h_A[i] = Comparator<TYPE>::generate();
-    h_B[i] = Comparator<TYPE>::generate();
+    h_A[i] = Comparator<Tin>::generate();
+    h_B[i] = Comparator<Tin>::generate();
   }
 
   // upload matrix A buffer
   {
     std::cout << "upload matrix A buffer" << std::endl;
-    RT_CHECK(vx_copy_to_dev(A_buffer, h_A.data(), 0, buf_size));
+    RT_CHECK(vx_copy_to_dev(A_buffer, h_A.data(), 0, buf_size_A));
   }
 
   // upload matrix B buffer
   {
     std::cout << "upload matrix B buffer" << std::endl;
-    RT_CHECK(vx_copy_to_dev(B_buffer, h_B.data(), 0, buf_size));
+    RT_CHECK(vx_copy_to_dev(B_buffer, h_B.data(), 0, buf_size_B));
   }
 
   // Upload kernel binary
@@ -207,17 +214,17 @@ int main(int argc, char *argv[]) {
 
   // download destination buffer
   std::cout << "download destination buffer" << std::endl;
-  RT_CHECK(vx_copy_from_dev(h_C.data(), C_buffer, 0, buf_size));
+  RT_CHECK(vx_copy_from_dev(h_C.data(), C_buffer, 0, buf_size_C));
 
   // verify result
   std::cout << "verify result" << std::endl;
   int errors = 0;
   {
-    std::vector<TYPE> h_ref(size_sq);
+    std::vector<Tout> h_ref(size_sq);
     matmul_cpu(h_ref.data(), h_A.data(), h_B.data(), size, size);
 
     for (uint32_t i = 0; i < h_ref.size(); ++i) {
-      if (!Comparator<TYPE>::compare(h_C[i], h_ref[i], i, errors)) {
+      if (!Comparator<Tout>::compare(h_C[i], h_ref[i], i, errors)) {
         ++errors;
       }
     }
