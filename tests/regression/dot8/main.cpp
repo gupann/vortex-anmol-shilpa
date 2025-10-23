@@ -29,19 +29,17 @@ using Tin  = int8_t; // inputs A, B
 using Tout = int32_t; // output C
 
 template <>
-class Comparator<int> {
+class Comparator<int8_t> {
 public:
-  static const char* type_str() {
-    return "integer";
+  static const char* type_str() { return "int8_t"; }
+  static int8_t generate() {
+    // keep magnitudes small to avoid big accumulations
+    return static_cast<int8_t>((rand() % 7) - 3); // [-3, 3]
   }
-  static int generate() {
-    return rand();
-  }
-  static bool compare(int a, int b, int index, int errors) {
+  static bool compare(int8_t a, int8_t b, int index, int errors) {
     if (a != b) {
-      if (errors < 100) {
-        printf("*** error: [%d] expected=%d, actual=%d\n", index, b, a);
-      }
+      if (errors < 100)
+        printf("*** error: [%d] expected=%d, actual=%d\n", index, (int)b, (int)a);
       return false;
     }
     return true;
@@ -49,24 +47,14 @@ public:
 };
 
 template <>
-class Comparator<float> {
+class Comparator<int32_t> {
 public:
-  static const char* type_str() {
-    return "float";
-  }
-  static float generate() {
-    return static_cast<float>(rand()) / RAND_MAX;
-  }
-  static bool compare(float a, float b, int index, int errors) {
-    union fi_t { float f; int32_t i; };
-    fi_t fa, fb;
-    fa.f = a;
-    fb.f = b;
-    auto d = std::abs(fa.i - fb.i);
-    if (d > FLOAT_ULP) {
-      if (errors < 100) {
-        printf("*** error: [%d] expected=%f, actual=%f\n", index, b, a);
-      }
+  static const char* type_str() { return "int32_t"; }
+  static int32_t generate() { return rand(); }
+  static bool compare(int32_t a, int32_t b, int index, int errors) {
+    if (a != b) {
+      if (errors < 100)
+        printf("*** error: [%d] expected=%d, actual=%d\n", index, b, a);
       return false;
     }
     return true;

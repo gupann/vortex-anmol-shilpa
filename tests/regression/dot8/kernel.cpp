@@ -15,8 +15,7 @@ void kernel_body(kernel_arg_t* __UNIFORM__ arg) {
 
     for (int k = 0; k + 3 < size; k += 4) {
         // Pack 4 int8_t elements from A and B into 32-bit integers
-        uint32_t packedA;
-        std::memcpy(&packedA, &A[row * size + k], sizeof(uint32_t));
+        uint32_t packedA = *reinterpret_cast<const uint32_t*>(&A[row * size + k]);
 
         uint32_t packedB =
             (uint32_t)(uint8_t)B[(k+0)*size + col]        |
