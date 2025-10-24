@@ -194,7 +194,7 @@ inline std::ostream &operator<<(std::ostream &os, const AluType& type) {
   case AluType::OR:      os << "OR"; break;
   case AluType::XOR:     os << "XOR"; break;
   case AluType::CZERO:   os << "CZERO"; break;
-  case AluType::DOT8:   os << "DOT8"; break;
+  case AluType::DOT8:    os << "DOT8"; break;
   default:
     assert(false);
   }
