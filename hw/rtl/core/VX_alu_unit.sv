@@ -72,7 +72,7 @@ module VX_alu_unit import VX_gpu_pkg::*; #(
             if (`EXT_M_ENABLED && (per_block_execute_if[block_idx].data.op_args.alu.xtype == ALU_TYPE_MULDIV))
                 pe_select = PE_IDX_MDV;
             else if ((per_block_execute_if[block_idx].data.op_args.alu.xtype == ALU_TYPE_ARITH) &&
-                    (per_block_execute_if[block_idx].data.op_type == INST_ALU_DOT8))
+                    (per_block_execute_if[block_idx].data.op_type == INST_OP_BITS'(INST_ALU_DOT8)))
                 pe_select = PE_IDX_DOT8;
         end
 
