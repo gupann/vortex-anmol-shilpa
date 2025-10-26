@@ -117,7 +117,6 @@ module VX_alu_dot8 import VX_gpu_pkg::*; #(
 
         // Drive c as 32-bit (cast to `XLEN` later by the assign below)
         assign c = c_signed[31:0];
-`
         // calculation done
 
         `BUFFER_EX(result, c, pe_enable, 1, LATENCY_DOT8);
