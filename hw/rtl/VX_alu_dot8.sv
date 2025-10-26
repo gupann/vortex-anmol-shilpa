@@ -86,30 +86,38 @@ module VX_alu_dot8 import VX_gpu_pkg::*; #(
         wire [`XLEN-1:0] b = pe_data_in[i][`XLEN +: `XLEN];
         wire [31:0] c, result;
 
-    // extract bytes (little-endian: lowest byte is element 0)
-    wire signed [7:0] a0 = a[ 7: 0];
-    wire signed [7:0] a1 = a[15: 8];
-    wire signed [7:0] a2 = a[23:16];
-    wire signed [7:0] a3 = a[31:24];
+        // TODO: calculate c
+        // extract bytes (little-endian: lowest byte is element 0)
+        wire signed [7:0] a0 = a[ 7: 0];
+        wire signed [7:0] a1 = a[15: 8];
+        wire signed [7:0] a2 = a[23:16];
+        wire signed [7:0] a3 = a[31:24];
 
-    wire signed [7:0] b0 = b[ 7: 0];
-    wire signed [7:0] b1 = b[15: 8];
-    wire signed [7:0] b2 = b[23:16];
-    wire signed [7:0] b3 = b[31:24];
+        wire signed [7:0] b0 = b[ 7: 0];
+        wire signed [7:0] b1 = b[15: 8];
+        wire signed [7:0] b2 = b[23:16];
+        wire signed [7:0] b3 = b[31:24];
 
-    // multiply each pair, outpt = 16-bit signed products
-    wire signed [15:0] p0 = a0 * b0;
-    wire signed [15:0] p1 = a1 * b1;
-    wire signed [15:0] p2 = a2 * b2;
-    wire signed [15:0] p3 = a3 * b3;
+        // multiply each pair, output = 16-bit signed products
+        wire signed [15:0] p0 = a0 * b0;
+        wire signed [15:0] p1 = a1 * b1;
+        wire signed [15:0] p2 = a2 * b2;
+        wire signed [15:0] p3 = a3 * b3;
 
-    // accumulate into 32-bit signed result (no overflow expected for 4*(127*127) < 2^31)
-    wire signed [31:0] sum01 = $signed(p0) + $signed(p1);
-    wire signed [31:0] sum23 = $signed(p2) + $signed(p3);
-    wire signed [31:0] c_signed = sum01 + sum23;
+        // sign-extend to 32 BEFORE addition to avoid Verilator WIDTHEXPAND
+        wire signed [31:0] p0_sext = {{16{p0[15]}}, p0};
+        wire signed [31:0] p1_sext = {{16{p1[15]}}, p1};
+        wire signed [31:0] p2_sext = {{16{p2[15]}}, p2};
+        wire signed [31:0] p3_sext = {{16{p3[15]}}, p3};
 
-    // assign c as unsigned 32-bit value (result_if expects XLEN sized but we buffer as 32-bit)
-    assign c = c_signed[31:0];
+        // accumulate into 32-bit signed result (max 4*(127*127) < 2^31)
+        wire signed [31:0] sum01    = p0_sext + p1_sext;
+        wire signed [31:0] sum23    = p2_sext + p3_sext;
+        wire signed [31:0] c_signed = sum01 + sum23;
+
+        // assign c as unsigned 32-bit value (result_if expects XLEN sized but we buffer as 32-bit)
+        assign c = c_signed[31:0];
+        // calculation done
 
         `BUFFER_EX(result, c, pe_enable, 1, LATENCY_DOT8);
         assign pe_data_out[i] = `XLEN'(result);
