@@ -533,6 +533,20 @@ module VX_decode import VX_gpu_pkg::*; #(
                             default:;
                         endcase
                     end
+                    7'h03: begin
+                        case (funct3)
+                            3'h0: begin
+                                ex_type = EX_ALU;
+                                op_type = INST_OP_BITS'(INST_ALU_DOT8);
+                                op_args.alu = '0;
+                                op_args.alu.xtype = ALU_TYPE_ARITH;
+                                use_rd = 1;
+                                use_rs1 = 1;
+                                use_rs2 = 1;
+                            end
+                            default:;
+                        endcase
+                    end
                 `endif
                     default:;
                 endcase

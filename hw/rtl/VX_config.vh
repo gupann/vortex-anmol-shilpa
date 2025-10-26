@@ -14,6 +14,8 @@
 `ifndef VX_CONFIG_VH
 `define VX_CONFIG_VH
 
+`define LATENCY_DOT8 2
+
 `ifndef MIN
 `define MIN(x, y)   (((x) < (y)) ? (x) : (y))
 `endif

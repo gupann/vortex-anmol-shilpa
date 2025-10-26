@@ -1,0 +1,126 @@
+`include "VX_define.vh"
+
+module VX_alu_dot8 import VX_gpu_pkg::*; #(
+    parameter `STRING INSTANCE_ID = "",
+    parameter NUM_LANES = 1
+) (
+    input wire          clk,
+    input wire          reset,
+
+    // Inputs
+    VX_execute_if.slave execute_if,
+
+    // Outputs
+    VX_result_if.master result_if
+);
+    `UNUSED_SPARAM (INSTANCE_ID)
+    localparam PID_BITS = `CLOG2(`NUM_THREADS / NUM_LANES);
+    localparam PID_WIDTH = `UP(PID_BITS);
+    localparam TAG_WIDTH = UUID_WIDTH + NW_WIDTH + NUM_LANES + PC_BITS + 1 + NUM_REGS_BITS + PID_WIDTH + 1 + 1;
+    localparam LATENCY_DOT8 = `LATENCY_DOT8;
+    localparam PE_RATIO = 1;
+    localparam NUM_PES = `UP(NUM_LANES / PE_RATIO);
+
+    `UNUSED_VAR (execute_if.data.op_type)
+    `UNUSED_VAR (execute_if.data.op_args)
+    `UNUSED_VAR (execute_if.data.rs3_data)
+
+    wire pe_enable;
+    wire [NUM_LANES-1:0][2*`XLEN-1:0] data_in;
+    wire [NUM_PES-1:0][2*`XLEN-1:0] pe_data_in;
+    wire [NUM_PES-1:0][`XLEN-1:0] pe_data_out;
+
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_data_in
+        assign data_in[i][0 +: `XLEN] = execute_if.data.rs1_data[i];
+        assign data_in[i][`XLEN +: `XLEN] = execute_if.data.rs2_data[i];
+    end
+
+    // PEs time-multiplexing
+    VX_pe_serializer #(
+        .NUM_LANES  (NUM_LANES),
+        .NUM_PES    (NUM_PES),
+        .LATENCY    (LATENCY_DOT8),
+        .DATA_IN_WIDTH (2 * `XLEN),
+        .DATA_OUT_WIDTH (`XLEN),
+        .TAG_WIDTH  (TAG_WIDTH),
+        .PE_REG     (1)
+    ) pe_serializer (
+        .clk        (clk),
+        .reset      (reset),
+        .valid_in   (execute_if.valid),
+        .data_in    (data_in),
+        .tag_in     ({
+            execute_if.data.uuid,
+            execute_if.data.wid,
+            execute_if.data.tmask,
+            execute_if.data.PC,
+            execute_if.data.wb,
+            execute_if.data.rd,
+            execute_if.data.pid,
+            execute_if.data.sop,
+            execute_if.data.eop
+        }),
+        .ready_in   (execute_if.ready),
+        .pe_enable  (pe_enable),
+        .pe_data_in (pe_data_out),
+        .pe_data_out(pe_data_in),
+        .valid_out  (result_if.valid),
+        .data_out   (result_if.data.data),
+        .tag_out    ({
+            result_if.data.uuid,
+            result_if.data.wid,
+            result_if.data.tmask,
+            result_if.data.PC,
+            result_if.data.wb,
+            result_if.data.rd,
+            result_if.data.pid,
+            result_if.data.sop,
+            result_if.data.eop
+        }),
+        .ready_out  (result_if.ready)
+    );
+
+    // PEs instancing
+    for (genvar i = 0; i < NUM_PES; ++i) begin : g_PEs
+        wire [`XLEN-1:0] a = pe_data_in[i][0 +: `XLEN];
+        wire [`XLEN-1:0] b = pe_data_in[i][`XLEN +: `XLEN];
+        wire [31:0] c, result;
+
+    // extract bytes (little-endian: lowest byte is element 0)
+    wire signed [7:0] a0 = a[ 7: 0];
+    wire signed [7:0] a1 = a[15: 8];
+    wire signed [7:0] a2 = a[23:16];
+    wire signed [7:0] a3 = a[31:24];
+
+    wire signed [7:0] b0 = b[ 7: 0];
+    wire signed [7:0] b1 = b[15: 8];
+    wire signed [7:0] b2 = b[23:16];
+    wire signed [7:0] b3 = b[31:24];
+
+    // multiply each pair, outpt = 16-bit signed products
+    wire signed [15:0] p0 = a0 * b0;
+    wire signed [15:0] p1 = a1 * b1;
+    wire signed [15:0] p2 = a2 * b2;
+    wire signed [15:0] p3 = a3 * b3;
+
+    // accumulate into 32-bit signed result (no overflow expected for 4*(127*127) < 2^31)
+    wire signed [31:0] sum01 = $signed(p0) + $signed(p1);
+    wire signed [31:0] sum23 = $signed(p2) + $signed(p3);
+    wire signed [31:0] c_signed = sum01 + sum23;
+
+    // assign c as unsigned 32-bit value (result_if expects XLEN sized but we buffer as 32-bit)
+    assign c = c_signed[31:0];
+
+        `BUFFER_EX(result, c, pe_enable, 1, LATENCY_DOT8);
+        assign pe_data_out[i] = `XLEN'(result);
+
+    `ifdef DBG_TRACE_PIPELINE
+        always @(posedge clk) begin
+            if (pe_enable) begin
+                `TRACE(2, ("%t: %s dot8[%0d]: a=0%0h, b=0x%0h, c=0x%0h\n", $time, INSTANCE_ID, i, a, b, c))
+            end
+        end
+    `endif
+    end
+
+endmodule
